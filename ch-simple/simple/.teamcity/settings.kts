@@ -15,145 +15,118 @@ an argument.
 VcsRoots, BuildTypes, Templates, and subprojects can be
 registered inside the project using the vcsRoot(), buildType(),
 template(), and subProject() methods respectively.
+
+To debug settings scripts in IntelliJ IDEA, open the 'TeamCity'
+tool window (View -> Tool Windows -> TeamCity), then click the
+'Debug' button in the toolbar and select the desired settings file.
 */
 
 version = "2019.2"
 
 project {
-    // Project description
     description = "Simple Chapter Project Example"
 
-    // VCS Root definition
-    val vcsRoot = GitVcsRoot {
-        id("SimpleProjectVcs")
-        name = "Simple Project Git Repository"
-        url = "https://github.com/username/simple-project.git" // Replace with actual repository URL
-        branch = "refs/heads/main"
-        branchSpec = "+:refs/heads/*"
-    }
-    vcsRoot(vcsRoot)
+    // Define Main VCS Root
+    val mainVcsRoot = DslContext.settingsRoot
 
-    // Store build type references
-    val buildConf = BuildType {
-        id("SimpleProjectBuild")
+    // Build Configuration
+    buildType {
+        id("Build")
         name = "Build"
-        description = "Builds the Simple Project"
 
         vcs {
-            root(vcsRoot)
+            root(mainVcsRoot)
         }
 
-        // Build steps
         steps {
-            // Clean before build
             maven {
-                name = "Clean"
-                goals = "clean"
-                runnerArgs = "-Dmaven.test.skip=true"
-            }
-
-            // Compile and package
-            maven {
-                name = "Compile and Package"
-                goals = "package"
-                runnerArgs = "-Dmaven.test.skip=true"
+                name = "Clean and Package"
+                goals = "clean package"
+                runnerArgs = "-Dmaven.test.failure.ignore=true"
+                userSettingsSelection = "settings.xml"
             }
         }
 
-        // Triggers
         triggers {
             vcs {
                 branchFilter = "+:*"
             }
         }
 
-        // Features
         features {
             perfmon {
             }
         }
-
-        // Artifact rules
-        artifactRules = "target/*.jar"
     }
 
-    val testConf = BuildType {
-        id("SimpleProjectTest")
+    // Test Configuration
+    buildType {
+        id("Test")
         name = "Test"
-        description = "Runs tests for the Simple Project"
 
         vcs {
-            root(vcsRoot)
+            root(mainVcsRoot)
         }
 
-        // Build steps
         steps {
-            // Run tests
             maven {
                 name = "Run Tests"
                 goals = "test"
+                runnerArgs = "-Dmaven.test.failure.ignore=true"
+                userSettingsSelection = "settings.xml"
             }
         }
 
-        // Dependencies
-        dependencies {
-            snapshot(buildConf) {
-                onDependencyFailure = FailureAction.FAIL_TO_START
+        triggers {
+            vcs {
+                branchFilter = "+:*"
             }
         }
 
-        // Features
         features {
             perfmon {
             }
         }
     }
 
-    val deployConf = BuildType {
-        id("SimpleProjectDeploy")
+    // Deploy Configuration
+    buildType {
+        id("Deploy")
         name = "Deploy"
-        description = "Deploys the Simple Project"
 
         vcs {
-            root(vcsRoot)
+            root(mainVcsRoot)
         }
 
-        // Build steps
         steps {
-            // Deploy step (example using script)
+            maven {
+                name = "Deploy to Repository"
+                goals = "deploy"
+                runnerArgs = "-DskipTests"
+                userSettingsSelection = "settings.xml"
+            }
+
             script {
-                name = "Deploy to Environment"
+                name = "Deployment Notification"
                 scriptContent = """
-                    echo "Deploying Simple Project..."
-                    # Add deployment commands here
                     echo "Deployment completed successfully!"
+                    echo "Artifact: simple-0.8-SNAPSHOT.jar"
                 """.trimIndent()
             }
         }
 
-        // Dependencies
         dependencies {
-            snapshot(testConf) {
+            snapshot(RelativeId("Build")) {
+                onDependencyFailure = FailureAction.FAIL_TO_START
+            }
+            snapshot(RelativeId("Test")) {
                 onDependencyFailure = FailureAction.FAIL_TO_START
             }
         }
 
-        // Features
         features {
             perfmon {
             }
         }
-    }
-
-    // Register build types
-    buildType(buildConf)
-    buildType(testConf)
-    buildType(deployConf)
-
-    // Build chain
-    sequential {
-        buildType(buildConf)
-        buildType(testConf)
-        buildType(deployConf)
     }
 }
