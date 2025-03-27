@@ -6,21 +6,6 @@ import jetbrains.buildServer.configs.kotlin.v2019_2.buildSteps.maven
 import jetbrains.buildServer.configs.kotlin.v2019_2.triggers.vcs
 import jetbrains.buildServer.configs.kotlin.v2019_2.buildSteps.script
 
-/*
-The settings script is an entry point for defining a TeamCity
-project hierarchy. The script should contain a single call to the
-project() function with a Project instance or an init function as
-an argument.
-
-VcsRoots, BuildTypes, Templates, and subprojects can be
-registered inside the project using the vcsRoot(), buildType(),
-template(), and subProject() methods respectively.
-
-To debug settings scripts in IntelliJ IDEA, open the 'TeamCity'
-tool window (View -> Tool Windows -> TeamCity), then click the
-'Debug' button in the toolbar and select the desired settings file.
-*/
-
 version = "2019.2"
 
 project {
@@ -30,103 +15,85 @@ project {
     val mainVcsRoot = DslContext.settingsRoot
 
     // Build Configuration
-    buildType {
-        id("Build")
-        name = "Build"
-
-        vcs {
-            root(mainVcsRoot)
-        }
-
-        steps {
-            maven {
-                name = "Clean and Package"
-                goals = "clean package"
-                runnerArgs = "-Dmaven.test.failure.ignore=true"
-                userSettingsSelection = "settings.xml"
-            }
-        }
-
-        triggers {
-            vcs {
-                branchFilter = "+:*"
-            }
-        }
-
-        features {
-            perfmon {
-            }
-        }
-    }
-
-    // Test Configuration
-    buildType {
-        id("Test")
-        name = "Test"
-
-        vcs {
-            root(mainVcsRoot)
-        }
-
-        steps {
-            maven {
-                name = "Run Tests"
-                goals = "test"
-                runnerArgs = "-Dmaven.test.failure.ignore=true"
-                userSettingsSelection = "settings.xml"
-            }
-        }
-
-        triggers {
-            vcs {
-                branchFilter = "+:*"
-            }
-        }
-
-        features {
-            perfmon {
-            }
-        }
-    }
+    buildType(Build)
 
     // Deploy Configuration
-    buildType {
-        id("Deploy")
-        name = "Deploy"
+    buildType(Deploy)
+}
 
-        vcs {
-            root(mainVcsRoot)
-        }
+// Build Configuration
+object Build : BuildType({
+    name = "Build"
+    description = "Builds and tests the project"
 
-        steps {
-            maven {
-                name = "Deploy to Repository"
-                goals = "deploy"
-                runnerArgs = "-DskipTests"
-                userSettingsSelection = "settings.xml"
-            }
+    // VCS Settings
+    vcs {
+        root(DslContext.settingsRoot)
+    }
 
-            script {
-                name = "Deployment Notification"
-                scriptContent = """
-                    echo "Deployment completed successfully!"
-                    echo "Artifact: simple-0.8-SNAPSHOT.jar"
-                """.trimIndent()
-            }
-        }
-
-        dependencies {
-            snapshot(RelativeId("Build")) {
-                onDependencyFailure = FailureAction.FAIL_TO_START
-            }
-            snapshot(RelativeId("Test")) {
-                onDependencyFailure = FailureAction.FAIL_TO_START
-            }
-        }
-
-        features {
-            perfmon {
-            }
+    // Build Steps
+    steps {
+        maven {
+            name = "Clean and Package"
+            goals = "clean package"
+            runnerArgs = "-Dmaven.test.failure.ignore=true"
+            userSettingsSelection = "settings.xml"
         }
     }
-}
+
+    // Triggers
+    triggers {
+        vcs {
+            branchFilter = "+:*"
+        }
+    }
+
+    // Features
+    features {
+        perfmon {
+        }
+    }
+
+    // Artifact Rules
+    artifactRules = """
+        target/*.jar
+    """.trimIndent()
+})
+
+// Deploy Configuration
+object Deploy : BuildType({
+    name = "Deploy"
+    description = "Deploys the application"
+
+    // VCS Settings
+    vcs {
+        root(DslContext.settingsRoot)
+    }
+
+    // Build Steps
+    steps {
+        script {
+            name = "Deploy Application"
+            scriptContent = """
+                echo "Deploying application..."
+                mkdir -p deploy
+                cp target/*.jar deploy/
+                echo "Application deployed successfully!"
+            """.trimIndent()
+        }
+    }
+
+    // Dependencies
+    dependencies {
+        snapshot(Build) {
+            reuseBuilds = ReuseBuilds.SUCCESSFUL
+            onDependencyFailure = FailureAction.FAIL_TO_START
+        }
+    }
+
+    // Features
+    features {
+        perfmon {
+        }
+    }
+})
