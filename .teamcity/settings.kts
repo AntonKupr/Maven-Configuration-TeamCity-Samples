@@ -29,92 +29,69 @@ project {
     // Define Main VCS Root
     val mainVcsRoot = DslContext.settingsRoot
 
-    // Build Configuration
+    // Build Configuration for building and testing the app
     buildType {
-        id("BuildAndTest")
+        id("Build")
         name = "Build and Test"
         description = "Builds and tests the Maven Simple Project"
 
-        // VCS Settings
         vcs {
             root(mainVcsRoot)
         }
 
-        // Build Steps
         steps {
-            // Compile and test the project
             maven {
-                name = "Compile and Test"
+                name = "Build and Test"
                 goals = "clean test"
                 runnerArgs = "-Dmaven.test.failure.ignore=true"
-                mavenVersion = defaultProvidedVersion()
-                userSettingsSelection = "settings.xml"
-                jdkHome = "%env.JDK_11%"
-            }
-
-            // Package the application
-            maven {
-                name = "Package"
-                goals = "package"
-                mavenVersion = defaultProvidedVersion()
-                userSettingsSelection = "settings.xml"
-                jdkHome = "%env.JDK_11%"
-                workingDir = "ch-simple"
+                mavenVersion = auto()
             }
         }
 
-        // Triggers
         triggers {
             vcs {
                 branchFilter = "+:*"
             }
         }
 
-        // Build Features
         features {
             perfmon {
             }
         }
-
-        // Artifact Rules
-        artifactRules = """
-            ch-simple/simple/target/*.jar => simple-artifacts
-        """.trimIndent()
     }
 
-    // Deployment Configuration
+    // Build Configuration for deploying the app
     buildType {
-        id("DeployApplication")
-        name = "Deploy Application"
+        id("Deploy")
+        name = "Deploy"
         description = "Deploys the Maven Simple Project"
 
-        // VCS Settings
         vcs {
             root(mainVcsRoot)
         }
 
-        // Build Steps
         steps {
+            maven {
+                name = "Package"
+                goals = "clean package"
+                mavenVersion = auto()
+            }
+            
             script {
-                name = "Deploy to Environment"
+                name = "Deploy"
                 scriptContent = """
-                    echo "Deploying application to environment..."
-                    mkdir -p deploy
-                    cp ch-simple/simple/target/*.jar deploy/
+                    echo "Deploying the application..."
                     echo "Deployment completed successfully!"
                 """.trimIndent()
             }
         }
 
-        // Dependencies
         dependencies {
-            snapshot(RelativeId("BuildAndTest")) {
-                reuseBuilds = ReuseBuilds.ANY
+            snapshot(RelativeId("Build")) {
                 onDependencyFailure = FailureAction.FAIL_TO_START
             }
         }
 
-        // Build Features
         features {
             perfmon {
             }
